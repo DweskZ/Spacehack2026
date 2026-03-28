@@ -1,0 +1,12 @@
+earthengine-api
+geemap
+jupyter
+matplotlib
+numpy
+pandas
+geopandas
+folium
+ipywidgets
+streamlit
+streamlit-folium
+altair
