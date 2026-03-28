@@ -1136,81 +1136,81 @@ def _render_map_integrated(
 
 
 # --- HEADER ---
-st.title("Proyecto Boomerang")
-st.markdown("**Manglares como barrera contra inundaciones en Greater Guayaquil**")
+st.title("Boomerang Dashboard")
+st.markdown("**Mangroves as flood barriers in Greater Guayaquil**")
 st.markdown("Sentinel-2 + Landsat 8 | Google Earth Engine | SpaceHACK 2026")
 st.sidebar.markdown("### Boomerang Alert Engine")
 st.sidebar.caption(
-    "Combina GEE + lluvia + nivel del mar (Open-Meteo Forecast + Marine). "
-    "No sustituye INAMHI / ECU911 / INOCAR."
+    "Combines GEE + rain + sea level (Open-Meteo Forecast + Marine). "
+    "Does not replace INAMHI / ECU911 / INOCAR."
 )
 st.sidebar.link_button(
-    "Open-Meteo (lluvia)",
+    "Open-Meteo (rain forecast)",
     "https://open-meteo.com/",
-    help="API pública; atribución en informes.",
+    help="Public API; attribution in reports.",
 )
 st.sidebar.link_button(
-    "Open-Meteo Marine (marea/nivel mar)",
+    "Open-Meteo Marine (tide / sea level)",
     "https://open-meteo.com/en/docs/marine-weather-api",
-    help="sea_level_height_msl — proxy de marea en el Golfo.",
+    help="sea_level_height_msl — tide proxy in the Gulf.",
 )
 st.sidebar.link_button(
-    "Global Mangrove Watch (paper + datos)",
+    "Global Mangrove Watch (paper + data)",
     "https://doi.org/10.5281/zenodo.6894273",
-    help="GMW v3/v4 — cita en slides; capa 2020 en GEE vía sat-io.",
+    help="GMW v3/v4 — cite in slides; 2020 layer in GEE via sat-io.",
 )
-if st.sidebar.button("Actualizar pronóstico y alertas", use_container_width=True):
+if st.sidebar.button("Refresh forecast & alerts", use_container_width=True):
     alert_bundle_cached.clear()
     st.rerun()
 
-st.sidebar.markdown("### Escenario (marea + lluvia)")
+st.sidebar.markdown("### Scenario (tide + rain)")
 _grid_n = len(SCENARIO_GRID_VALUES)
 _tide_i = st.sidebar.selectbox(
-    "Marea (simulación desde agua)",
+    "Tide (simulation from water mask)",
     range(_grid_n),
     index=2,
     format_func=lambda i: TIDE_SCENARIO_LABELS[i],
     key="tide_scenario_idx",
     help=(
-        "Niveles cualitativos tipo estuario (baja → pleamar). "
-        "Controlan el buffer morfológico desde la máscara de agua (~30–680 m); no sustituyen tablas INOCAR."
+        "Qualitative estuary-style levels (low → high tide). "
+        "Controls morphological buffer from water mask (~30–680 m); does not replace INOCAR tide tables."
     ),
 )
 _rain_i = st.sidebar.selectbox(
-    "Lluvia (estrés / escorrentía en la prueba)",
+    "Rain (stress / runoff in simulation)",
     range(_grid_n),
     index=1,
     format_func=lambda i: RAIN_SCENARIO_LABELS[i],
     key="rain_scenario_idx",
     help=(
-        "Bandos orientativos al estilo acumulado diario en zona tropical costera; "
-        "en el modelo solo aumentan el buffer de inundación proxy (~150 m máx. por lluvia). No es pronóstico oficial."
+        "Indicative daily accumulation bands for tropical coastal zone; "
+        "in the model they only increase the flood proxy buffer (~150 m max per rain). Not an official forecast."
     ),
 )
 tide_pct = float(SCENARIO_GRID_VALUES[_tide_i])
 rain_stress_pct = float(SCENARIO_GRID_VALUES[_rain_i])
 buffer_m = inundacion_buffer_meters(tide_pct, rain_stress_pct)
-st.sidebar.caption(f"Buffer combinado ~{buffer_m} m desde agua (proxy morfológico; no DEM).")
-st.sidebar.markdown("##### Mapa integrado")
+st.sidebar.caption(f"Combined buffer ~{buffer_m} m from water (morphological proxy; no DEM).")
+st.sidebar.markdown("##### Integrated map")
 st.sidebar.caption(
-    "Las **capas** se activan en el visor del mapa (sin recargar). "
-    "El **escenario** (marea y lluvia) solo aquí a la izquierda; alinea métricas y tablas de abajo."
+    "**Layers** are toggled in the map viewer (no reload). "
+    "**Scenario** (tide and rain) only here on the left; aligns metrics and tables below."
 )
-st.sidebar.caption("Abajo: tablas y gráficos (sin mapas duplicados).")
+st.sidebar.caption("Below: tables and charts (no duplicate maps).")
 
-# --- METRICAS TOP ---
+# --- TOP METRICS ---
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Costa Protegida", "48.7%")
-col2.metric("Costa Expuesta", "51.3%", delta="-9,367 ha", delta_color="inverse")
-col3.metric("Expansion Urbana", "+11,247 ha", delta="2013-2024", delta_color="inverse")
-col4.metric("Manglar Perdido", "-17,202 ha", delta="2013-2024", delta_color="inverse")
+col1.metric("Protected Coast", "48.7%")
+col2.metric("Exposed Coast", "51.3%", delta="+9,367 ha at risk", delta_color="inverse")
+col3.metric("Urban Expansion", "+11,247 ha", delta="2013–2024", delta_color="inverse")
+col4.metric("Mangrove Lost", "−17,202 ha", delta="2013–2024", delta_color="normal")
 
 st.divider()
 
-st.subheader("Mapa integrado — Greater Guayaquil")
+st.subheader("Integrated Map — Greater Guayaquil")
 st.markdown(
-    "Un solo mapa con imagen de **satélite**. Activa capas en el panel del mapa; "
-    "el escenario de prueba está en la barra lateral (mismas cifras que abajo)."
+    "Single map with **satellite** imagery. Toggle layers in the map panel; "
+    "the simulation scenario is set in the sidebar (same figures as below)."
 )
 
 _render_map_integrated(
@@ -1318,35 +1318,35 @@ with st.expander("Clasificación de uso de suelo y tablas (2024)", expanded=Fals
     col_a, col_b = st.columns(2)
     with col_a:
         df_areas = pd.DataFrame({
-            'Clase': ['Manglar/Vegetacion', 'Zona Urbana', 'Agua', 'Suelo/Agricultura'],
-            'Hectareas': [48851, 26502, 4622, 116834],
-            'Porcentaje': ['24.8%', '13.5%', '2.3%', '59.4%']
+            'Class': ['Mangrove/Vegetation', 'Urban Zone', 'Water', 'Soil/Agriculture'],
+            'Hectares': [48851, 26502, 4622, 116834],
+            'Percentage': ['24.8%', '13.5%', '2.3%', '59.4%']
         })
         st.dataframe(df_areas, hide_index=True, use_container_width=True)
     with col_b:
-        st.metric("NDVI Medio Manglar", "0.67")
-        st.warning("Estado MODERADO - El manglar necesita atencion")
+        st.metric("Avg Mangrove NDVI", "0.67")
+        st.warning("MODERATE status — mangrove needs attention")
 
-with st.expander("Protección costera contra inundaciones", expanded=False):
-    st.subheader("Proteccion Costera contra Inundaciones")
-    st.markdown("Franja de 500m del agua: **verde** = protegida, **rojo** = urbano expuesto, **naranja** = vulnerable")
+with st.expander("Coastal flood protection", expanded=False):
+    st.subheader("Coastal Flood Protection")
+    st.markdown("500m strip from water: **green** = protected, **red** = exposed urban, **orange** = vulnerable")
     st.info(
-        "En el **panel de capas del mapa**, activa **Protegida / Expuesta / Vulnerable** y **GMW**."
+        "In the **map layer panel**, activate **Protected / Exposed / Vulnerable** and **GMW**."
     )
 
     col_c, col_d = st.columns(2)
     with col_c:
-        st.metric("Costa Protegida", "8,888 ha (48.7%)")
-        st.success("Zonas con barrera natural de manglar")
+        st.metric("Protected Coast", "8,888 ha (48.7%)")
+        st.success("Areas with natural mangrove buffer")
     with col_d:
-        st.metric("Urbano Directo al Agua", "5,066 ha")
-        st.error("Sin ninguna proteccion de manglar contra inundaciones")
+        st.metric("Urban Directly Facing Water", "5,066 ha")
+        st.error("No mangrove buffer against flooding")
 
-with st.expander("Centro de alertas Boomerang (prototipo)", expanded=False):
-    st.subheader("Centro de alertas Boomerang (prototipo)")
+with st.expander("Boomerang Alert Center (prototype)", expanded=False):
+    st.subheader("Boomerang Alert Center (prototype)")
     st.markdown(
-        "Motor de reglas: **GEE** (costa/manglar) + **lluvia** (Forecast API) + **nivel del mar** "
-        "(Marine API, celda en el Golfo) + **índice 0–100** + **proxy económico** — track MCC."
+        "Rule engine: **GEE** (coast/mangrove) + **rain** (Forecast API) + **sea level** "
+        "(Marine API, Gulf cell) + **index 0–100** + **economic proxy** — MCC track."
     )
 
     alerts, am = alert_bundle_cached()
@@ -1355,54 +1355,54 @@ with st.expander("Centro de alertas Boomerang (prototipo)", expanded=False):
     if ri is not None:
         if ri >= 72:
             st.error(
-                f"**Riesgo compuesto alto** — índice **{ri}/100** "
-                "(lluvia + nivel del mar modelado + costa expuesta)."
+                f"**High compound risk** — index **{ri}/100** "
+                "(rain + modelled sea level + exposed coast)."
             )
         elif ri >= 45:
-            st.warning(f"**Riesgo compuesto moderado** — índice Boomerang **{ri}/100**.")
+            st.warning(f"**Moderate compound risk** — Boomerang index **{ri}/100**.")
         else:
-            st.success(f"**Riesgo compuesto acotado** — índice **{ri}/100** (seguir monitoreando).")
-        st.progress(min(100, max(0, ri)) / 100.0, text=f"Índice Boomerang (0–100): {ri}")
+            st.success(f"**Low compound risk** — index **{ri}/100** (keep monitoring).")
+        st.progress(min(100, max(0, ri)) / 100.0, text=f"Boomerang Index (0–100): {ri}")
 
     k1, k2, k3, k4 = st.columns(4)
     k1.metric(
-        "Pronóstico 72 h (máx. mm/d)",
+        "72h forecast (max mm/d)",
         am.get("max_precip_72h_mm") if am.get("max_precip_72h_mm") is not None else "—",
     )
     k2.metric(
-        "Prob. máx. lluvia 72 h (%)",
+        "Max rain prob. 72h (%)",
         int(am["max_precip_prob_72h"]) if am.get("max_precip_prob_72h") is not None else "—",
     )
     k3.metric(
-        "Lluvia acum. 7 d (mm)",
+        "Rain total 7d (mm)",
         am.get("precip_sum_7d_mm") if am.get("precip_sum_7d_mm") is not None else "—",
     )
     k4.metric(
-        "Exposición económica (proxy MUSD/a)",
+        "Economic exposure (proxy MUSD/y)",
         f"{am['economic_exposure_proxy_million_usd']:.1f}" if am.get("economic_exposure_proxy_million_usd") is not None else "—",
     )
 
     s1, s2, s3 = st.columns(3)
     s1.metric(
-        "Nivel mar máx. 72 h (m)",
+        "Sea level max 72h (m)",
         am.get("sea_level_max_72h_m") if am.get("sea_level_max_72h_m") is not None else "—",
-        help="Open-Meteo Marine, celda Golfo; incluye marea modelada (~8 km).",
+        help="Open-Meteo Marine, Gulf cell; includes modelled tide (~8 km).",
     )
     s2.metric(
-        "Rango mareal 72 h (m)",
+        "Tidal range 72h (m)",
         am.get("sea_level_range_72h_m") if am.get("sea_level_range_72h_m") is not None else "—",
     )
     hw = am.get("marine_high_water_flag")
     s3.metric(
-        "Marea alta relativa (72 h)",
-        "Sí" if hw is True else ("No" if hw is False else "—"),
-        help="Máx. en 72 h ≥ percentil 80 de la semana (proxy de pico de marea).",
+        "Relatively high water (72h)",
+        "Yes" if hw is True else ("No" if hw is False else "—"),
+        help="Max in 72h ≥ 80th percentile of the week (tide peak proxy).",
     )
     st.caption(am.get("marine_point_label", ""))
 
     chart_rows = am.get("daily_precip_rows") or []
     if chart_rows:
-        st.markdown("##### Pronóstico diario de lluvia (próximos días)")
+        st.markdown("##### Daily rain forecast (next days)")
         df_chart, dia_order = _daily_precip_chart_df(chart_rows)
         precip_chart = (
             alt.Chart(df_chart)
@@ -1415,7 +1415,7 @@ with st.expander("Centro de alertas Boomerang (prototipo)", expanded=False):
                 ),
                 y=alt.Y("mm:Q", title="mm"),
                 tooltip=[
-                    alt.Tooltip("Dia", title="Día"),
+                    alt.Tooltip("Dia", title="Day"),
                     alt.Tooltip("mm:Q", title="mm", format=".1f"),
                 ],
             )
@@ -1424,156 +1424,152 @@ with st.expander("Centro de alertas Boomerang (prototipo)", expanded=False):
         st.altair_chart(precip_chart, use_container_width=True)
 
     st.caption(
-        f"Última sincronización UTC: **{am.get('updated_utc', '—')}** · "
-        "Lluvia: Forecast API · Nivel del mar: Marine API · Índice: heurística demo (no oficial)."
+        f"Last sync UTC: **{am.get('updated_utc', '—')}** · "
+        "Rain: Forecast API · Sea level: Marine API · Index: demo heuristic (not official)."
     )
 
-    st.markdown("#### Cola de alertas (ordenadas por severidad)")
+    st.markdown("#### Alert queue (sorted by severity)")
     rows = alerts_to_dataframe_rows(alerts)
     df_alerts = pd.DataFrame(rows)[["Severity", "Title", "Action"]]
     st.dataframe(df_alerts, hide_index=True, use_container_width=True, height=min(320, 60 + len(alerts) * 38))
 
-    with st.expander("Ver texto completo de cada alerta (para demo / pitch)"):
+    with st.expander("Full alert text (for demo)"):
         for i, a in enumerate(alerts, 1):
             st.markdown(f"**{i}. {a.title}** (`{SEVERITY_LABEL[a.severity]}`)")
             st.markdown(a.detail)
             st.markdown(f"*Action:* {a.action}")
-            st.caption(f"Fuentes: {a.sources}")
+            st.caption(f"Sources: {a.sources}")
             st.divider()
 
-    st.markdown("#### Contexto espacial (mismo mapa de arriba)")
-    st.caption(
-        "NDVI + GMW 2020: actívalos en el **panel de capas** del mapa."
-    )
+    st.markdown("#### Spatial context (same map above)")
+    st.caption("NDVI + GMW 2020: activate them in the map **layer panel**.")
 
-    st.markdown("#### Inventario BRI (indices locales del equipo)")
+    st.markdown("#### BRI Inventory (team local indices)")
     df_bri = pd.DataFrame({
-        'Nivel': ['Bajo', 'Moderado', 'Alto', 'Critico'],
-        'Hectareas': [9550, 5247, 2601, 1325],
-        'Descripcion': [
-            'Manglar presente, riesgo minimo',
-            'Manglar degradado o parcial',
-            'Sin manglar, agua contaminada',
-            'Boomerang activo: zona critica'
+        'Level': ['Low', 'Moderate', 'High', 'Critical'],
+        'Hectares': [9550, 5247, 2601, 1325],
+        'Description': [
+            'Mangrove present, minimal risk',
+            'Degraded or partial mangrove',
+            'No mangrove, contaminated water',
+            'Boomerang active: critical zone'
         ]
     })
     st.dataframe(df_bri, hide_index=True, use_container_width=True)
-    st.metric("Total en Riesgo (moderado+)", "9,173 ha")
+    st.metric("Total at Risk (moderate+)", "9,173 ha")
 
     st.info(
-        "**Ya integrado:** coincidencia **lluvia + nivel del mar alto** (modelo Marine) + costa expuesta (EO). "
-        "**Siguiente paso:** tablas **INOCAR** en el estuario (precisión náutica), capas **Global Mangrove Watch** "
-        "o **SERVIR/MANGLEE (Guayas)** en GEE para validar manglar frente a solo NDVI por umbrales."
+        "**Already integrated:** **rain + high sea level** coincidence (Marine model) + exposed coast (EO). "
+        "**Next step:** **INOCAR** tide tables in the estuary (nautical precision), **Global Mangrove Watch** "
+        "or **SERVIR/MANGLEE (Guayas)** layers in GEE to validate mangrove vs NDVI thresholds only."
     )
 
-with st.expander("Tendencias temporales (2013–2024)", expanded=False):
-    st.subheader("Tendencias Temporales (2013-2024)")
+with st.expander("Time trends (2013–2024)", expanded=False):
+    st.subheader("Time Trends (2013–2024)")
 
     col_e, col_f = st.columns(2)
     with col_e:
-        st.markdown("**Clorofila en el Agua (NDCI)**")
-        st.markdown("La contaminacion sube cada anio")
+        st.markdown("**Chlorophyll in water (NDCI)**")
+        st.markdown("Pollution signal drifts upward over the years")
         ndci_df = pd.DataFrame({
-            'Anio': [2016, 2018, 2019, 2020, 2021, 2022, 2023, 2024],
+            'Year': [2016, 2018, 2019, 2020, 2021, 2022, 2023, 2024],
             'NDCI': [0.1589, 0.1175, 0.1582, 0.1331, 0.1419, 0.1618, 0.1699, 0.1870]
         })
-        st.line_chart(ndci_df, x='Anio', y='NDCI', color='#FF0000')
-        st.metric("Tendencia", "+47% por decada")
+        st.line_chart(ndci_df, x='Year', y='NDCI', color='#FF0000')
+        st.metric("Trend", "+47% per decade")
 
     with col_f:
-        st.markdown("**Area de Manglar Sano**")
-        st.markdown("Estable pero con eventos de estres")
+        st.markdown("**Healthy mangrove area**")
+        st.markdown("Fairly stable with occasional stress events")
         manglar_df = pd.DataFrame({
-            'Anio': [2013,2014,2015,2016,2017,2018,2019,2020,2021,2023,2024],
-            'Hectareas': [5826,5822,5730,5758,5864,5082,5881,4822,5785,5888,5855]
+            'Year': [2013,2014,2015,2016,2017,2018,2019,2020,2021,2023,2024],
+            'Hectares': [5826,5822,5730,5758,5864,5082,5881,4822,5785,5888,5855]
         })
-        st.line_chart(manglar_df, x='Anio', y='Hectareas', color='#228B22')
-        st.metric("Tendencia", "-116.7 ha/anio")
+        st.line_chart(manglar_df, x='Year', y='Hectares', color='#228B22')
+        st.metric("Trend", "-116.7 ha/year")
 
-with st.expander("Extra: lluvia histórica, variables y mapa categórico", expanded=False):
-    st.subheader("Extra — sugerencias del equipo")
+with st.expander("Extra: historical rain, variables & categorical map", expanded=False):
+    st.subheader("Extra — team suggestions")
     st.markdown(
-        "Integración rápida de ideas del grupo: **porcentaje de inundación (proxy)** (mismo escenario que la barra lateral), "
-        "**contexto de lluvia histórica vs pronóstico**, **capas categóricas** (bosque seco, industrial, "
-        "agua con NDCI alto) y tabla de **variables categóricas**."
+        "Quick integration: **flood percentage (proxy)** (same sidebar scenario), "
+        "**historical rain vs forecast context**, **categorical layers** (dry forest, industrial, "
+        "high-NDCI water) and **categorical variables** table."
     )
 
     fp_extra = flood_proxy_stats_cached(float(tide_pct), float(rain_stress_pct))
     z1, z2, z3 = st.columns(3)
     z1.metric(
-        "% del ROI bajo inundación (proxy)",
+        "% of ROI under flood proxy",
         f"{fp_extra.get('pct_roi_inundacion_proxy', 0)} %",
-        help="Fracción del rectángulo ROI cubierta por máscara de inundación (escenario actual).",
+        help="Fraction of ROI rectangle covered by flood mask (current scenario).",
     )
     z2.metric(
-        "% urbano+suelo inundado (proxy)",
+        "% urban+soil flooded (proxy)",
         f"{fp_extra.get('pct_urbano_suelo_inundacion_proxy', 0)} %",
-        help="Del área clase urbano+suelo, cuánto queda bajo el proxy sin manglar cercano.",
+        help="Of urban+soil class area, how much falls under the proxy without nearby mangrove.",
     )
-    z3.metric("Ha inundación proxy", f"{fp_extra.get('ha_inundacion_proxy', 0)}")
-    st.caption(
-        "Misma lógica que el mapa principal y el ranking por zonas; no es modelo hidráulico DEM."
-    )
+    z3.metric("Flood proxy area (ha)", f"{fp_extra.get('ha_inundacion_proxy', 0)}")
+    st.caption("Same logic as main map and zone ranking; not a DEM hydraulic model.")
 
     arch, aerr, ctx = historical_rain_bundle()
     if aerr:
         st.warning(f"Archive Open-Meteo: {aerr}")
     if ctx.get("ratio_forecast_vs_typical_7d") is not None:
         st.metric(
-            "Pronóstico 7d vs ventanas típicas de 7d (últimos 90d)",
-            f"{ctx['ratio_forecast_vs_typical_7d']}× la media móvil",
-            help="Acumulado 7d pronosticado / media de todas las sumas de 7 días corridos en el archivo.",
+            "7d forecast vs typical 7d windows (last 90d)",
+            f"{ctx['ratio_forecast_vs_typical_7d']}× the rolling mean",
+            help="7d forecast sum / mean of all 7-day rolling sums in the archive.",
         )
     st.caption(
-        f"Acum. 7d pronosticado: **{ctx.get('forecast_sum_7d_mm')}** mm · "
-        f"Media ventanas 7d históricas: **{ctx.get('hist_mean_7d_window_mm')}** mm · "
-        f"Máx. ventana 7d: **{ctx.get('hist_max_7d_window_mm')}** mm"
+        f"7d forecast sum: **{ctx.get('forecast_sum_7d_mm')}** mm · "
+        f"Historical 7d window mean: **{ctx.get('hist_mean_7d_window_mm')}** mm · "
+        f"Max 7d window: **{ctx.get('hist_max_7d_window_mm')}** mm"
     )
     if arch:
-        st.markdown("##### Lluvia diaria reciente (Archive, ~90 d)")
+        st.markdown("##### Recent daily rain (Archive, ~90d)")
         dfh = pd.DataFrame(arch)
         st.line_chart(dfh, x="Fecha", y="mm", height=240)
 
-    st.markdown("##### Variables categóricas (uso en mapas y análisis)")
+    st.markdown("##### Categorical variables (used in maps and analysis)")
     df_cat = pd.DataFrame({
         "Variable": [
-            "Clase uso suelo (S2)",
-            "Bosque seco (proxy)",
-            "Industrial / tejido mixto (proxy)",
-            "Agua + NDCI alto (proxy contaminación)",
-            "GMW 2020 manglar",
-            "Riesgo BRI",
+            "Land cover class (S2)",
+            "Dry forest (proxy)",
+            "Industrial / mixed fabric (proxy)",
+            "Water + high NDCI (contamination proxy)",
+            "GMW 2020 mangrove",
+            "BRI risk level",
         ],
-        "Tipo": ["Categórica 1–4", "Binaria", "Binaria", "Binaria", "Binaria", "Ordinal bajo→crítico"],
-        "Fuente": [
+        "Type": ["Categorical 1–4", "Binary", "Binary", "Binary", "Binary", "Ordinal low→critical"],
+        "Source": [
             "NDVI/MNDWI/NDBI",
-            "NDVI intermedio + bajo MNDWI",
+            "Mid NDVI + low MNDWI",
             "NDBI + NDVI",
-            "MNDWI agua + NDCI",
+            "MNDWI water + NDCI",
             "Global Mangrove Watch",
-            "Índices equipo / notebook",
+            "Team indices / notebook",
         ],
     })
     st.dataframe(df_cat, hide_index=True, use_container_width=True)
 
-    st.markdown("##### Capas categóricas (mismo mapa de arriba)")
+    st.markdown("##### Categorical layers (same map above)")
     st.info(
-        "Bosque seco, industrial, agua (NDCI alto) y GMW: actívalos en **Capas** junto al mapa."
+        "Dry forest, industrial, water (high NDCI) and GMW: activate them in **Layers** next to the map."
     )
     st.caption(
-        "Correlación formal (p. ej. Pearson manglar–NDCI): métricas del mentor en notebook / informe; "
-        "aquí solo contexto operativo lluvia pasada vs próximos 7d."
+        "Formal correlation (e.g. Pearson mangrove–NDCI): mentor metrics in notebook / report; "
+        "here only operational context past rain vs next 7d."
     )
 
 # --- FOOTER ---
 st.divider()
 col_g, col_h, col_i = st.columns(3)
-col_g.info("**Poblacion:** >3.3 millones")
-col_h.warning("**Lluvia extrema:** >70 mm/dia")
-col_i.error("**Mareas:** Hasta 5 metros")
+col_g.info("**Population:** >3.3 million")
+col_h.warning("**Extreme rainfall:** >70 mm/day")
+col_i.error("**River tides:** Up to 5 meters")
 
 st.markdown("---")
 st.caption(
-    "Proyecto Boomerang | SpaceHACK 2026 | Track MCC | Sentinel-2 + Landsat 8 + GMW 2020 | "
+    "Boomerang Project | SpaceHACK 2026 | Track MCC | Sentinel-2 + Landsat 8 + GMW 2020 | "
     "GEE + Open-Meteo Forecast/Marine"
 )
