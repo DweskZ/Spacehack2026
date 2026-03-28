@@ -2,11 +2,12 @@ earthengine-api
 geemap
 jupyter
 matplotlib
+Pillow
 numpy
 pandas
 geopandas
 folium
 ipywidgets
-streamlit
+streamlit>=1.33.0
 streamlit-folium
 altair

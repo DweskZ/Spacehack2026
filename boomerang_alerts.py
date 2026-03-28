@@ -15,10 +15,11 @@ from __future__ import annotations
 import json
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from enum import IntEnum
 from typing import Any, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 # --- ROI centroide (Greater Guayaquil) — mismo orden que dashboard / notebook ---
@@ -54,10 +55,10 @@ class Severity(IntEnum):
 
 
 SEVERITY_LABEL = {
-    Severity.INFO: "Informativo",
-    Severity.ADVISORY: "Preventivo",
-    Severity.WATCH: "Vigilancia",
-    Severity.WARNING: "Alerta alta",
+    Severity.INFO: "Info",
+    Severity.ADVISORY: "Advisory",
+    Severity.WATCH: "Watch",
+    Severity.WARNING: "Warning",
 }
 
 
@@ -70,10 +71,14 @@ class AlertItem:
     sources: str
 
 
+# Misma ventana que el pronóstico de lluvia; si es menor, hay días con lluvia pero sin horas marinas.
+MARINE_FORECAST_DAYS = 14
+
+
 def fetch_marine_sea_level_hourly(
     lat: float = MARINE_LAT,
     lon: float = MARINE_LON,
-    forecast_days: int = 7,
+    forecast_days: int = MARINE_FORECAST_DAYS,
 ) -> Tuple[Optional[dict], Optional[str]]:
     """
     Nivel del mar respecto a MSL (incluye marea + efectos); resolución ~8 km.
@@ -92,12 +97,12 @@ def fetch_marine_sea_level_hourly(
             data = json.loads(resp.read().decode())
         hourly = data.get("hourly")
         if not hourly or "sea_level_height_msl" not in hourly:
-            return None, "Respuesta Marine sin hourly"
+            return None, "Marine API response missing hourly sea level"
         vals = [v for v in hourly["sea_level_height_msl"] if v is not None]
         if len(vals) < 8:
             return (
                 None,
-                "Nivel del mar no disponible en este pixel (usar celda marina; en producción: INOCAR).",
+                "Sea level not available at this grid cell (use offshore cell; in production: link INOCAR).",
             )
         return hourly, None
     except Exception as e:
@@ -137,10 +142,118 @@ def marine_metrics_from_hourly(hourly: Optional[dict]) -> dict[str, Any]:
     }
 
 
+def _api_time_to_local_date_key(t: Any) -> Optional[str]:
+    """Extrae YYYY-MM-DD del instante que devuelve Open-Meteo (timezone ya aplicada en la petición)."""
+    ts = str(t).strip()
+    if not ts:
+        return None
+    # "2025-03-31T00:00" o con Z / offset
+    if len(ts) >= 10 and ts[4] == "-" and ts[7] == "-":
+        return ts[:10]
+    return None
+
+
+def sea_level_daily_stats_for_iso(
+    hourly: Optional[dict],
+    date_iso: str,
+) -> Optional[dict[str, float]]:
+    """
+    Máx / mín / rango de ``sea_level_height_msl`` (m) para un día ``YYYY-MM-DD``
+    en las series horarias del Marine API (misma zona que el motor de alertas).
+    """
+    if not hourly or not date_iso:
+        return None
+    date_key = date_iso.strip()[:10]
+    if len(date_key) != 10:
+        return None
+    times = hourly.get("time") or []
+    levels = hourly.get("sea_level_height_msl") or []
+    day_levels: List[float] = []
+    for t, v in zip(times, levels):
+        if v is None:
+            continue
+        tkey = _api_time_to_local_date_key(t)
+        if tkey == date_key:
+            day_levels.append(float(v))
+    if not day_levels:
+        return None
+    mx = max(day_levels)
+    mn = min(day_levels)
+    return {
+        "max_m": mx,
+        "min_m": mn,
+        "range_m": mx - mn,
+        "n_hours": float(len(day_levels)),
+    }
+
+
+def fetch_open_meteo_archive_precipitation(
+    past_days: int = 90,
+    lat: float = LAT_GYE,
+    lon: float = LON_GYE,
+) -> Tuple[Optional[List[dict[str, Any]]], Optional[str]]:
+    """
+    Lluvia diaria histórica (Open-Meteo Archive API) para correlación / contexto vs pronóstico.
+    """
+    end = date.today()
+    start = end - timedelta(days=past_days)
+    url = (
+        f"https://archive-api.open-meteo.com/v1/archive?"
+        f"latitude={lat}&longitude={lon}"
+        f"&start_date={start.isoformat()}&end_date={end.isoformat()}"
+        f"&daily=precipitation_sum&timezone=America/Guayaquil"
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            data = json.loads(resp.read().decode())
+        d = data.get("daily") or {}
+        times = d.get("time") or []
+        vals = d.get("precipitation_sum") or []
+        rows = []
+        for i, t in enumerate(times):
+            v = float(vals[i]) if i < len(vals) and vals[i] is not None else 0.0
+            rows.append({"Fecha": t, "mm": round(v, 2)})
+        return rows, None
+    except Exception as e:
+        return None, str(e)
+
+
+def forecast_vs_history_context(
+    archive_rows: Optional[list[dict]],
+    forecast_daily: Optional[dict],
+) -> dict[str, Any]:
+    """
+    Compara acumulado 7d del pronóstico con la distribución de ventanas de 7d en el histórico reciente.
+    (Proxy de 'correlación' operativa para el equipo — no es estudio estadístico formal.)
+    """
+    out: dict[str, Any] = {
+        "forecast_sum_7d_mm": None,
+        "hist_mean_7d_window_mm": None,
+        "hist_max_7d_window_mm": None,
+        "ratio_forecast_vs_typical_7d": None,
+    }
+    if not archive_rows or len(archive_rows) < 7:
+        return out
+    arr = np.array([r["mm"] for r in archive_rows], dtype=float)
+    windows = [float(arr[i : i + 7].sum()) for i in range(len(arr) - 6)]
+    out["hist_mean_7d_window_mm"] = round(float(np.mean(windows)), 2)
+    out["hist_max_7d_window_mm"] = round(float(np.max(windows)), 2)
+
+    if not forecast_daily:
+        return out
+    fvals = forecast_daily.get("precipitation_sum") or []
+    fc7 = sum(float(fvals[i]) for i in range(min(7, len(fvals)))) if fvals else 0.0
+    out["forecast_sum_7d_mm"] = round(fc7, 2)
+    m = out["hist_mean_7d_window_mm"]
+    if m and m > 1e-6:
+        out["ratio_forecast_vs_typical_7d"] = round(fc7 / m, 2)
+    return out
+
+
 def fetch_open_meteo_precip_forecast(
     lat: float = LAT_GYE,
     lon: float = LON_GYE,
-    forecast_days: int = 7,
+    forecast_days: int = MARINE_FORECAST_DAYS,
 ) -> Tuple[Optional[dict], Optional[str]]:
     """Devuelve (payload daily con precipitation_sum y precipitation_probability_max, error_message)."""
     url = (
@@ -155,7 +268,7 @@ def fetch_open_meteo_precip_forecast(
             data = json.loads(resp.read().decode())
         daily = data.get("daily")
         if not daily:
-            return None, "Respuesta Open-Meteo sin bloque daily"
+            return None, "Open-Meteo response missing daily block"
         return daily, None
     except Exception as e:
         return None, str(e)
@@ -206,6 +319,18 @@ def daily_precip_dataframe_rows(daily: Optional[dict]) -> List[dict]:
     return rows
 
 
+def peak_precipitation_day_72h(rows: List[dict]) -> Tuple[Optional[str], float]:
+    """
+    Fecha (YYYY-MM-DD) y mm del día con más lluvia en los primeros 3 días del pronóstico
+    (misma ventana que usa el índice Boomerang para la parte de lluvia).
+    """
+    if not rows:
+        return None, 0.0
+    slice3 = rows[:3]
+    best = max(slice3, key=lambda r: float(r.get("mm", 0) or 0))
+    return best.get("Fecha"), float(best.get("mm", 0) or 0)
+
+
 def compute_risk_index_100(
     mx3_mm: float,
     pct_coast_exposed: float,
@@ -241,7 +366,8 @@ def build_alerts(
         "forecast_error": forecast_error,
         "marine_ok": marine_hourly is not None,
         "marine_error": marine_error,
-        "marine_point_label": f"Marino {MARINE_LAT}, {MARINE_LON} (Golfo, ~8 km)",
+        "marine_hourly": marine_hourly,
+        "marine_point_label": f"Marine grid {MARINE_LAT}, {MARINE_LON} (Gulf, ~8 km resolution)",
         "max_precip_72h_mm": None,
         "max_precip_7d_mm": None,
         "max_precip_prob_72h": None,
@@ -261,14 +387,14 @@ def build_alerts(
     alerts.append(
         AlertItem(
             severity=Severity.WATCH if PCT_COAST_EXPOSED >= 50 else Severity.ADVISORY,
-            title="Índice costero Boomerang (EO)",
+            title="Boomerang coastal index (Earth observation)",
             detail=(
-                f"~{PCT_COAST_EXPOSED:.1f}% de la franja costera analizada queda sin protección de manglar "
-                f"en el buffer de 500 m (Sentinel-2 + reglas NDVI/MNDWI/NDBI). "
-                f"Urbano directo al agua: ~{HA_URBAN_DIRECT_WATER:,.0f} ha."
+                f"About {PCT_COAST_EXPOSED:.1f}% of the analysed coastal strip has little or no mangrove buffer "
+                f"within 500 m of the water (Sentinel-2 + NDVI/MNDWI/NDBI rules). "
+                f"Urban fabric directly facing water: ~{HA_URBAN_DIRECT_WATER:,.0f} ha."
             ),
-            action="Priorizar restauración y corredores verdes en tramos rojos del mapa de protección costera.",
-            sources="Google Earth Engine — COPERNICUS/S2_SR_HARMONIZED, máscara agua + buffer 500 m",
+            action="Prioritize restoration and green corridors along the red stretches on the coastal protection map.",
+            sources="Google Earth Engine — COPERNICUS/S2_SR_HARMONIZED, water mask + 500 m buffer",
         )
     )
 
@@ -277,14 +403,14 @@ def build_alerts(
     alerts.append(
         AlertItem(
             severity=Severity.INFO,
-            title="Exposición económica (proxy)",
+            title="Economic exposure (illustrative proxy)",
             detail=(
-                f"Orden de magnitud ~${proxy_usd / 1e6:.1f} M USD/año en daños potenciales asociados a "
-                f"~{HA_COASTAL_EXPOSED_TOTAL:,.0f} ha costeros expuestos (calibración conservadora para demo; "
-                "no es póliza ni estudio de suelo)."
+                f"Roughly ${proxy_usd / 1e6:.1f} M USD/year in potential flood-related losses linked to "
+                f"~{HA_COASTAL_EXPOSED_TOTAL:,.0f} ha of exposed coast (conservative demo calibration; "
+                "not an insurance quote or cadastral study)."
             ),
-            action="Validar con datos locales de catastro y modelos hidráulicos INAMHI para cifras de política pública.",
-            sources="Proxy derivado de hectáreas expuestas × factor literatura inundación costera (ajustar en informe)",
+            action="Validate with local land-registry data and INAMHI hydraulic models before policy use.",
+            sources="Proxy = exposed hectares × literature factor for tropical coastal flooding (tune in report)",
         )
     )
 
@@ -298,9 +424,9 @@ def build_alerts(
         alerts.append(
             AlertItem(
                 severity=Severity.ADVISORY,
-                title="Pronóstico meteorológico no disponible",
-                detail=forecast_error or "Sin datos",
-                action="Reintentar más tarde; el motor sigue activo con capas satelitales.",
+                title="Weather forecast unavailable",
+                detail=forecast_error or "No data",
+                action="Try again later; satellite layers still work.",
                 sources="Open-Meteo API",
             )
         )
@@ -308,9 +434,9 @@ def build_alerts(
             alerts.append(
                 AlertItem(
                     severity=Severity.INFO,
-                    title="Nivel del mar (modelo Marine)",
+                    title="Sea level (Marine model)",
                     detail=marine_error,
-                    action="En producción: integrar tablas INOCAR o boya regional.",
+                    action="In production: plug in INOCAR tide tables or a regional buoy.",
                     sources="Open-Meteo Marine API",
                 )
             )
@@ -336,9 +462,9 @@ def build_alerts(
         alerts.append(
             AlertItem(
                 severity=Severity.INFO,
-                title="Nivel del mar: sin datos en esta corrida",
+                title="Sea level: no data this run",
                 detail=marine_error,
-                action="Reintentar; en operación real enlazar INOCAR / boyas del Golfo.",
+                action="Retry; in operations link INOCAR or Gulf buoys.",
                 sources="Open-Meteo Marine API",
             )
         )
@@ -353,14 +479,14 @@ def build_alerts(
         alerts.append(
             AlertItem(
                 severity=Severity.WARNING if mx3 >= MM_HEAVY_DAY else Severity.WATCH,
-                title="Coincidencia: lluvia + nivel del mar elevado (proxy estuario)",
+                title="Overlap: rain + high sea level (estuary proxy)",
                 detail=(
-                    f"Lluvia máx. diaria ~{mx3:.0f} mm en 72 h junto a fase de nivel del mar alto en el modelo marino "
-                    f"(máx. {metrics.get('sea_level_max_72h_m')} m). Con mucha costa sin manglar, sube el riesgo de "
-                    "inundación en bajos y drenajes hacia el estuario."
+                    f"Peak daily rain ~{mx3:.0f} mm in 72 h together with a high sea-level phase in the marine model "
+                    f"(max {metrics.get('sea_level_max_72h_m')} m). With long stretches of coast without mangrove, "
+                    "flood risk rises in low areas and drains toward the estuary."
                 ),
-                action="Priorizar aviso a comunidades costeras; revisar mapas NDVI y protección costera.",
-                sources="Open-Meteo Forecast + Marine + índice EO",
+                action="Flag coastal neighbourhoods; check NDVI and coastal protection maps.",
+                sources="Open-Meteo Forecast + Marine + EO index",
             )
         )
 
@@ -369,13 +495,13 @@ def build_alerts(
         alerts.append(
             AlertItem(
                 severity=Severity.WATCH,
-                title="Escenario compuesto Boomerang (lluvia + costa expuesta)",
+                title="Boomerang compound scenario (rain + exposed coast)",
                 detail=(
-                    f"Hasta ~{mx3:.0f} mm max. en un día (72 h) con ~{PCT_COAST_EXPOSED:.0f}% de costa sin manglar "
-                    "en buffer. Tensión en drenajes y bajos sin amortiguación de manglar."
+                    f"Up to ~{mx3:.0f} mm in one day (72 h window) with ~{PCT_COAST_EXPOSED:.0f}% of coast lacking mangrove "
+                    "inside the buffer. Stress on drains and low areas with little natural buffer."
                 ),
-                action="Priorizar mensajes en barrios BRI alto; cruzar con mapa de protección costera.",
-                sources="Open-Meteo + índice costero EO (Greater Guayaquil)",
+                action="Prioritise outreach in high-BRI neighbourhoods; cross-check coastal protection map.",
+                sources="Open-Meteo + EO coastal index (Greater Guayaquil)",
             )
         )
 
@@ -397,19 +523,19 @@ def build_alerts(
         alerts.append(
             AlertItem(
                 severity=Severity.WATCH,
-                title="Lluvia intensa prevista (72 h)",
-                detail=f"Máximo diario previsto ~{mx3:.0f} mm. Superposición con costa expuesta incrementa riesgo de inundación fluvial-costera.",
-                action="Pre-advertencia a comunidades en BRI alto; revisar mapas NDVI/manglar degradado.",
-                sources="Open-Meteo forecast + métricas EO",
+                title="Heavy rain expected (72 h)",
+                detail=f"Peak daily rain ~{mx3:.0f} mm. Combined with an exposed coast, fluvial–coastal flood risk rises.",
+                action="Early heads-up for high-BRI areas; review NDVI / degraded mangrove maps.",
+                sources="Open-Meteo forecast + EO metrics",
             )
         )
     else:
         alerts.append(
             AlertItem(
                 severity=Severity.INFO,
-                title="Ventana meteorológica moderada (72 h)",
-                detail=f"Máximo diario previsto ~{mx3:.1f} mm en 72 h. Mantener vigilancia del índice costero y salud del manglar.",
-                action="Usar el tab de simulación de marea para talleres de conciencia ciudadana.",
+                title="Moderate weather window (72 h)",
+                detail=f"Peak daily rain ~{mx3:.1f} mm in 72 h. Keep an eye on the coastal index and mangrove health.",
+                action="Use the tide simulation panel for community awareness sessions.",
                 sources="Open-Meteo forecast",
             )
         )
@@ -423,11 +549,11 @@ def alerts_to_dataframe_rows(alerts: List[AlertItem]) -> List[dict]:
     for a in alerts:
         rows.append(
             {
-                "Severidad": SEVERITY_LABEL[a.severity],
-                "Titulo": a.title,
-                "Detalle": a.detail,
-                "Accion": a.action,
-                "Fuentes": a.sources,
+                "Severity": SEVERITY_LABEL[a.severity],
+                "Title": a.title,
+                "Detail": a.detail,
+                "Action": a.action,
+                "Sources": a.sources,
             }
         )
     return rows
