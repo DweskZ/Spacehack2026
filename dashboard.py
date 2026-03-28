@@ -1203,7 +1203,7 @@ col1, col2, col3, col4 = st.columns(4)
 col1.metric("Protected Coast", "48.7%")
 col2.metric("Exposed Coast", "51.3%", delta="+9,367 ha at risk", delta_color="inverse")
 col3.metric("Urban Expansion", "+11,247 ha", delta="2013–2024", delta_color="inverse")
-col4.metric("Mangrove Lost", "−17,202 ha", delta="2013–2024", delta_color="normal")
+col4.metric("Mangrove Lost", "−17,202 ha", delta="since 2013", delta_color="inverse")
 
 st.divider()
 
@@ -1222,30 +1222,30 @@ _render_map_integrated(
 st.caption(
     "Abajo, las cifras siguen el escenario elegido a la izquierda. Los recuadros del mapa son orientativos, no límites oficiales."
 )
-with st.expander("Detalle para equipo técnico (capas y fuentes)", expanded=False):
+with st.expander("Technical details (layers & sources)", expanded=False):
     st.caption(
-        "Clasificación: manglar (mapa global 2020 y firma húmeda costera), bosque seco, urbano, agua, suelo. "
+        "Classification: mangrove (GMW 2020 + wet coastal spectral signature), dry forest, urban, water, soil. "
         "GMW: Bunting et al., 2022 · CC BY 4.0."
     )
 
 fp = flood_proxy_stats_cached(float(tide_pct), float(rain_stress_pct))
 rank_rows = zone_ranking_cached(float(tide_pct), float(rain_stress_pct))
 fp_c1, fp_c2, fp_c3 = st.columns(3)
-fp_c1.metric("Ha inundación proxy (ROI)", f"{fp.get('ha_inundacion_proxy', 0)}")
-fp_c2.metric("% ROI bajo inundación (proxy)", f"{fp.get('pct_roi_inundacion_proxy', 0)} %")
-fp_c3.metric("Buffer combinado aprox.", f"{buffer_m} m")
+fp_c1.metric("Flood proxy area (ROI)", f"{fp.get('ha_inundacion_proxy', 0)} ha")
+fp_c2.metric("% ROI under flood proxy", f"{fp.get('pct_roi_inundacion_proxy', 0)} %")
+fp_c3.metric("Combined buffer approx.", f"{buffer_m} m")
 
-st.markdown("##### Zonas con mayor área bajo inundación (proxy) — ordenadas")
+st.markdown("##### Zones with largest flooded area (proxy) — ranked")
 st.dataframe(pd.DataFrame(rank_rows), hide_index=True, use_container_width=True)
 
-st.markdown("##### Lluvia histórica reciente: días más lluviosos y referencia de altura")
+st.markdown("##### Recent historical rain: wettest days and height reference")
 st.caption(
-    "Datos de lluvia: **Open-Meteo Archive** (reanálisis diario en Guayaquil). "
-    "La columna de altura usa la **misma regla** que la tarjeta «Pronóstico del día» (heurística mm → cm), no un hidrograma medido."
+    "Rain data: **Open-Meteo Archive** (daily reanalysis for Guayaquil). "
+    "The height column uses the **same rule** as the 'Today's forecast' card (heuristic mm → cm), not a measured hydrograph."
 )
 _arch_rows, _arch_err, _ = historical_rain_bundle()
 if _arch_err:
-    st.warning(f"No se pudo cargar el histórico de lluvia: {_arch_err}")
+    st.warning(f"Could not load rain history: {_arch_err}")
 elif _arch_rows is not None and len(_arch_rows) > 0:
     _znames = demo_zone_names()
     _zi_hist = (
@@ -1254,11 +1254,11 @@ elif _arch_rows is not None and len(_arch_rows) > 0:
         else 0
     )
     _zone_hist = st.selectbox(
-        "Barrio para la referencia de altura (figura ~170 cm)",
+        "Neighborhood for height reference (~170 cm figure)",
         _znames,
         index=_zi_hist,
         key="hist_rainiest_zone_ref",
-        help="Mismo factor por barrio que en la demo de inundación; no es elevación de agua observada.",
+        help="Same per-neighborhood factor as in the flood demo; not observed water elevation.",
     )
     _top_n = 15
     _sorted_days = sorted(
@@ -1286,15 +1286,15 @@ elif _arch_rows is not None and len(_arch_rows) > 0:
         "la figura humana. Para contrastar con la realidad, usa reportes de **ECU911**, medios locales o estudios "
         "post-evento cuando existan."
     )
-    with st.expander("¿De dónde sale el nivel del agua en este tablero?", expanded=False):
+    with st.expander("Where does the water level in this dashboard come from?", expanded=False):
         st.markdown(
             """
-- **Tarjeta «Pronóstico del día» (cm):** convierte **mm/día** del pronóstico en centímetros con una fórmula fija
-  y un **factor por barrio** (relieve / proximidad a estero simulado). **No** es resultado de un modelo hidráulico ni DEM.
-- **Marea en esa tarjeta:** amplitud diaria del **Marine API** (rango de `sea_level_height_msl`) transformada con coeficientes fijos.
-- **Mapa rojo (inundación proxy):** en GEE, **buffer** desde la máscara de agua + escenario de la barra lateral;
-  urbano/suelo cerca sin manglar = área coloreada. **No** simula cota de lámina de agua.
-- **Coherencia:** los algoritmos están **alineados a propósito** (misma filosofía demo), no calibrados con medidas de terreno.
+- **'Today's forecast' card (cm):** converts **mm/day** from the forecast into centimetres using a fixed formula
+  and a **per-neighbourhood factor** (simulated relief / proximity to estero). **Not** from a hydraulic model or DEM.
+- **Tide in that card:** daily amplitude from the **Marine API** (`sea_level_height_msl` range) transformed with fixed coefficients.
+- **Red map (flood proxy):** in GEE, **buffer** from the water mask + sidebar scenario;
+  urban/soil nearby without mangrove = coloured area. **Does not** simulate actual water surface elevation.
+- **Consistency:** algorithms are **intentionally aligned** (same demo philosophy), not calibrated with field measurements.
             """
         )
 elif _arch_rows is not None and len(_arch_rows) == 0:
@@ -1304,15 +1304,15 @@ elif _arch_rows is not None and len(_arch_rows) == 0:
 else:
     st.caption("Sin datos de histórico (respuesta vacía).")
 
-with st.expander("Clasificación de uso de suelo y tablas (2024)", expanded=False):
-    st.subheader("Clasificacion de Uso de Suelo - 2024")
+with st.expander("Land cover classification & tables (2024)", expanded=False):
+    st.subheader("Land Cover Classification — 2024")
     st.markdown(
-        "**Verde (S2)** = Manglar (umbrales NDVI/MNDWI) | **Rojo** = Urbano | **Azul** = Agua | **Dorado** = Suelo. "
-        "En el **panel de capas del mapa** activa **Clasificación S2** y **GMW** si los necesitas."
+        "**Green (S2)** = Mangrove (NDVI/MNDWI thresholds) | **Red** = Urban | **Blue** = Water | **Gold** = Soil. "
+        "In the **map layer panel** activate **S2 Classification** and **GMW** if needed."
     )
     st.caption(
-        "GMW: Bunting et al., 2022 · capa anual 2020 `projects/sat-io/.../GMW_MNG_2020` · CC BY 4.0 · "
-        "Diferencias vs S2: fechas, metodología SAR/óptico y resolución."
+        "GMW: Bunting et al., 2022 · annual layer 2020 `projects/sat-io/.../GMW_MNG_2020` · CC BY 4.0 · "
+        "Differences vs S2: dates, SAR/optical methodology and resolution."
     )
 
     col_a, col_b = st.columns(2)
