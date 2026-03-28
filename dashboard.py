@@ -1430,14 +1430,14 @@ with st.expander("Centro de alertas Boomerang (prototipo)", expanded=False):
 
     st.markdown("#### Cola de alertas (ordenadas por severidad)")
     rows = alerts_to_dataframe_rows(alerts)
-    df_alerts = pd.DataFrame(rows)[["Severidad", "Titulo", "Accion"]]
+    df_alerts = pd.DataFrame(rows)[["Severity", "Title", "Action"]]
     st.dataframe(df_alerts, hide_index=True, use_container_width=True, height=min(320, 60 + len(alerts) * 38))
 
     with st.expander("Ver texto completo de cada alerta (para demo / pitch)"):
         for i, a in enumerate(alerts, 1):
             st.markdown(f"**{i}. {a.title}** (`{SEVERITY_LABEL[a.severity]}`)")
             st.markdown(a.detail)
-            st.markdown(f"*Accion:* {a.action}")
+            st.markdown(f"*Action:* {a.action}")
             st.caption(f"Fuentes: {a.sources}")
             st.divider()
 
