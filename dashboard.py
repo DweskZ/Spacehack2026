@@ -1281,10 +1281,9 @@ elif _arch_rows is not None and len(_arch_rows) > 0:
         )
     st.dataframe(pd.DataFrame(_hist_table), hide_index=True, use_container_width=True)
     st.info(
-        "**No es “hasta dónde llegó el agua” en la calle.** Eso exigiría sensores, fotos de campo o mapas de "
-        "inundación por evento (p. ej. radar satelital). Aquí solo ves **lluvia modelada** + **regla fija** para "
-        "la figura humana. Para contrastar con la realidad, usa reportes de **ECU911**, medios locales o estudios "
-        "post-evento cuando existan."
+        "**This is not 'how deep the water got' on the street.** That would require gauges, field photos, or event flood maps "
+        "(e.g. satellite radar). Here you only see **modelled rain** + a **fixed rule** for the human figure. "
+        "To compare with reality, use **ECU911** reports, local news, or post-event studies when available."
     )
     with st.expander("Where does the water level in this dashboard come from?", expanded=False):
         st.markdown(
