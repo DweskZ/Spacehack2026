@@ -41,6 +41,19 @@ from zone_notifications_demo import (
     water_depth_cm_from_forecast_mm,
 )
 
+
+def format_day_es(iso_date: str | None) -> str:
+    """Etiqueta corta en español: «28 Mar»."""
+    if not iso_date:
+        return "—"
+    try:
+        from datetime import datetime as _dt
+        d = _dt.strptime(str(iso_date)[:10], "%Y-%m-%d")
+    except ValueError:
+        return str(iso_date)
+    meses = ("Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic")
+    return f"{d.day} {meses[d.month - 1]}"
+
 st.set_page_config(page_title="Boomerang — Greater Guayaquil", layout="wide", page_icon="🌊")
 
 st.markdown(
@@ -73,10 +86,11 @@ st.markdown(
 def init_ee():
     import pathlib
     project = os.environ.get("EE_PROJECT_ID", "august-tower-470819-s6")
-    try:
+    # Sin secrets.toml, cualquier acceso a st.secrets (in, .get, etc.) dispara _parse() y
+    # StreamlitSecretNotFoundError. Solo leer ee_token si existe el archivo.
+    ee_token = None
+    if st.secrets.load_if_toml_exists():
         ee_token = st.secrets.get("ee_token")
-    except Exception:
-        ee_token = None
     if ee_token:
         creds_dir = pathlib.Path.home() / ".config" / "earthengine"
         creds_dir.mkdir(parents=True, exist_ok=True)
